@@ -57,26 +57,27 @@ public class RAGService : IRAGService
         }
     }
 
-    public async Task<DocumentProcessingResult> ProcessAndStoreDocumentAsync(string content, string fileName, 
-        Dictionary<string, string>? metadata = null, string? tenantId = null, CancellationToken cancellationToken = default)
+    public async Task<DocumentProcessingResult> ProcessAndStoreDocumentAsync(string content, string fileName,
+        Dictionary<string, string>? metadata = null, string? tenantId = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             var documentId = Guid.NewGuid().ToString();
             metadata ??= new Dictionary<string, string>();
-            
+
             // Add document-level metadata
             metadata["document_id"] = documentId;
             metadata["document_type"] = "processed_document";
-            
+
             _logger.LogInformation("Processing document {FileName} with ID {DocumentId}", fileName, documentId);
-            
+
             // Chunk the document
             var chunks = await _chunkingService.ProcessDocumentAsync(content, fileName, documentId, metadata);
-            
+
             var chunkIds = new List<string>();
             var tasks = new List<Task>();
-            
+
             // Process chunks in parallel
             foreach (var chunk in chunks)
             {
@@ -84,12 +85,12 @@ public class RAGService : IRAGService
                 tasks.Add(task);
                 chunkIds.Add(chunk.ChunkId);
             }
-            
+
             await Task.WhenAll(tasks);
-            
-            _logger.LogInformation("Successfully processed and stored {ChunkCount} chunks for document {DocumentId}", 
+
+            _logger.LogInformation("Successfully processed and stored {ChunkCount} chunks for document {DocumentId}",
                 chunks.Count, documentId);
-                
+
             return new DocumentProcessingResult(
                 documentId,
                 fileName,
@@ -105,14 +106,16 @@ public class RAGService : IRAGService
         }
     }
 
-    public async Task<DocumentProcessingResult> ProcessAndStoreDocumentFromStreamAsync(Stream fileStream, string fileName, 
-        Dictionary<string, string>? metadata = null, string? tenantId = null, CancellationToken cancellationToken = default)
+    public async Task<DocumentProcessingResult> ProcessAndStoreDocumentFromStreamAsync(Stream fileStream,
+        string fileName,
+        Dictionary<string, string>? metadata = null, string? tenantId = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             // Extract text content from file stream
             var content = await _chunkingService.ExtractTextFromFileAsync(fileStream, fileName);
-            
+
             // Process the extracted content
             return await ProcessAndStoreDocumentAsync(content, fileName, metadata, tenantId, cancellationToken);
         }
@@ -123,28 +126,30 @@ public class RAGService : IRAGService
         }
     }
 
-    private async Task ProcessAndStoreChunkAsync(DocumentChunk chunk, string? tenantId, CancellationToken cancellationToken)
+    private async Task ProcessAndStoreChunkAsync(DocumentChunk chunk, string? tenantId,
+        CancellationToken cancellationToken)
     {
         // Generate embedding for the chunk
         var embedding = await _semanticKernelService.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
-        
+
         // Convert chunk metadata to MetadataValue dictionary
         var enrichedMetadata = chunk.Metadata.ToDictionary(
-            kvp => kvp.Key, 
+            kvp => kvp.Key,
             kvp => new MetadataValue(kvp.Value));
-            
+
         // Add additional metadata
         enrichedMetadata["content"] = new MetadataValue(chunk.Content);
         enrichedMetadata["timestamp"] = new MetadataValue(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         enrichedMetadata["chunk_start_position"] = new MetadataValue(chunk.StartPosition);
         enrichedMetadata["chunk_end_position"] = new MetadataValue(chunk.EndPosition);
-        
+
         // Store in vector database
         await _vectorStoreService.UpsertAsync(chunk.ChunkId, embedding, enrichedMetadata, tenantId, cancellationToken);
     }
 
     public async Task<List<RAGResult>> SearchSimilarAsync(string query, int topK = 5,
-        Dictionary<string, object>? filter = null, string? tenantId = null, CancellationToken cancellationToken = default)
+        Dictionary<string, object>? filter = null, string? tenantId = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -152,7 +157,8 @@ public class RAGService : IRAGService
             var queryEmbedding = await _semanticKernelService.GenerateEmbeddingAsync(query, cancellationToken);
 
             // Search for similar vectors
-            var matches = await _vectorStoreService.QueryAsync(queryEmbedding, topK, filter, tenantId, cancellationToken);
+            var matches =
+                await _vectorStoreService.QueryAsync(queryEmbedding, topK, filter, tenantId, cancellationToken);
 
             // Convert to RAG results
             var results = matches.Select(match => new RAGResult(
@@ -217,7 +223,8 @@ public class RAGService : IRAGService
         }
     }
 
-    public async Task DeleteDocumentAsync(string documentId, string? tenantId = null, CancellationToken cancellationToken = default)
+    public async Task DeleteDocumentAsync(string documentId, string? tenantId = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -236,7 +243,7 @@ public class RAGService : IRAGService
         try
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
-            
+
             await _vectorStoreService.DeleteAllAsync(tenantId, cancellationToken);
             _logger.LogInformation("All documents deleted successfully for tenant: {TenantId}", tenantId);
         }

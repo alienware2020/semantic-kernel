@@ -76,7 +76,7 @@ public class PineconeVectorStoreService : IVectorStoreService
             .Select(match => new VectorMatch(
                 match.Id,
                 match.Score,
-                match.Metadata?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString())))
+                match.Metadata?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)))
             .ToList();
     }
 
